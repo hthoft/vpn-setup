@@ -39,7 +39,7 @@ echo "Requesting server configuration and available IP..."
 SERVER_RESPONSE=$(curl -s --connect-timeout 10 --max-time 15 "$SERVER_INFO_URL" || echo "")
 
 if [ -z "$SERVER_RESPONSE" ]; then
-  echo "❌ Could not reach server at $SERVER_IP:8080"
+  echo "ERROR: Could not reach server at $SERVER_IP:8080"
   echo "Please check:"
   echo "  - Server IP address is correct"
   echo "  - Server is running and accessible"
@@ -51,7 +51,7 @@ fi
 SERVER_OK=$(echo "$SERVER_RESPONSE" | jq -r '.ok // false')
 if [ "$SERVER_OK" != "true" ]; then
   ERROR_MSG=$(echo "$SERVER_RESPONSE" | jq -r '.error // "Unknown error"')
-  echo "❌ Server error: $ERROR_MSG"
+  echo "ERROR: Server error: $ERROR_MSG"
   exit 1
 fi
 
@@ -62,7 +62,7 @@ WG_LAST=$(echo "$SERVER_RESPONSE" | jq -r '.ip_last_octet')
 WG_ADDR="10.0.0.$WG_LAST/24"
 WG_SERVER_ENDPOINT="$SERVER_IP:$SERVER_PORT"
 
-echo "✅ Server configuration received:"
+echo "Server configuration received:"
 echo "   Public Key: ${WG_SERVER_PUBKEY:0:16}..."
 echo "   Endpoint: $WG_SERVER_ENDPOINT"
 echo "   Assigned IP: $WG_ADDR"
@@ -162,21 +162,21 @@ RESPONSE_BODY=$(echo "$PUSH_RESPONSE" | sed 's/HTTP_CODE:[0-9]*$//')
 
 if [ "$HTTP_CODE" = "200" ]; then
   echo
-  echo "✅ Configuration successfully pushed to server!"
+  echo "SUCCESS: Configuration successfully pushed to server!"
   
   # Check if peer was auto-configured
   if echo "$RESPONSE_BODY" | jq -e '.wg_configured == true' >/dev/null 2>&1; then
     SERVER_MSG=$(echo "$RESPONSE_BODY" | jq -r '.message // "Peer configured"')
-    echo "✅ $SERVER_MSG"
+    echo "SUCCESS: $SERVER_MSG"
     echo "   Server has automatically added your peer to WireGuard!"
   elif echo "$RESPONSE_BODY" | jq -e '.wg_configured == false' >/dev/null 2>&1; then
     WARN_MSG=$(echo "$RESPONSE_BODY" | jq -r '.warning // "Auto-config failed"')
-    echo "⚠️  Warning: $WARN_MSG"
+    echo "Warning: $WARN_MSG"
     echo "   You may need to manually add the peer on the server."
   fi
 else
   echo
-  echo "⚠️  Warning: Failed to push configuration to server (HTTP $HTTP_CODE)."
+  echo "Warning: Failed to push configuration to server - HTTP code $HTTP_CODE"
   echo "You may need to manually add this peer to the server:"
   echo
   echo "[Peer]"
@@ -205,23 +205,23 @@ echo
 echo "Testing connectivity..."
 echo "Testing VPN tunnel..."
 if timeout 5 ping -c 3 -W 2 10.0.0.1 >/dev/null 2>&1; then
-  echo "✅ VPN tunnel working - can reach gateway (10.0.0.1)"
+  echo "SUCCESS: VPN tunnel working - can reach gateway 10.0.0.1"
 else
-  echo "⚠️  Cannot ping VPN gateway (10.0.0.1)"
+  echo "WARNING: Cannot ping VPN gateway 10.0.0.1"
 fi
 
 echo "Testing internet through VPN..."
 if timeout 5 ping -c 2 -W 2 8.8.8.8 >/dev/null 2>&1; then
-  echo "✅ Internet connectivity through VPN working"
+  echo "SUCCESS: Internet connectivity through VPN working"
 else
-  echo "⚠️  No internet connectivity through VPN"
+  echo "WARNING: No internet connectivity through VPN"
 fi
 
 echo "Testing DNS resolution..."
 if timeout 5 nslookup google.com >/dev/null 2>&1; then
-  echo "✅ DNS resolution working"
+  echo "SUCCESS: DNS resolution working"
 else
-  echo "⚠️  DNS resolution not working"
+  echo "WARNING: DNS resolution not working"
 fi
 
 echo
