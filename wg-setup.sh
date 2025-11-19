@@ -21,6 +21,11 @@ export NEEDRESTART_MODE=a
 echo "=== WireGuard Setup Script ==="
 echo
 
+# Install basic dependencies early
+echo "Installing basic dependencies..."
+apt-get update -qq
+apt-get install -y -qq curl jq
+
 # Get server IP from user
 read -r -p "What is the WireGuard server IP address? " SERVER_IP
 while [[ -z "$SERVER_IP" ]]; do
@@ -83,9 +88,8 @@ mkdir -p /etc/wireguard
 chmod 700 /etc/wireguard
 
 # Install WireGuard and dependencies
-echo "Installing WireGuard and dependencies..."
-apt-get update -qq
-apt-get install -y -qq wireguard wireguard-tools resolvconf curl jq
+echo "Installing WireGuard and additional dependencies..."
+apt-get install -y -qq wireguard wireguard-tools resolvconf
 
 # Generate keys if they don't exist
 umask 077
