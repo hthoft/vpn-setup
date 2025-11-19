@@ -22,7 +22,7 @@ echo "=== WireGuard Setup Script ==="
 echo
 
 # Get server IP from user
-read -r -p "What is the WireGuard server IP address? ": " SERVER_IP
+read -r -p "What is the WireGuard server IP address? " SERVER_IP
 while [[ -z "$SERVER_IP" ]]; do
   read -r -p "Please enter the server IP address: " SERVER_IP
 done
