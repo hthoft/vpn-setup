@@ -7,8 +7,19 @@
 set -Eeuo pipefail
 trap 'echo "Error on line $LINENO"; exit 1' ERR
 
-# Target user for SSH keys
-TARGET_USER="RPI-5"
+# Detect the actual user (even when running with sudo)
+if [ -n "${SUDO_USER:-}" ]; then
+  TARGET_USER="$SUDO_USER"
+elif [ "${EUID:-$(id -u)}" -ne 0 ]; then
+  TARGET_USER="$(whoami)"
+else
+  # Running as root without sudo, prompt for target user
+  read -r -p "Enter the target username for SSH keys: " TARGET_USER
+  while [[ -z "$TARGET_USER" ]]; do
+    read -r -p "Please enter a username: " TARGET_USER
+  done
+fi
+
 TARGET_USER_HOME=$(eval echo "~$TARGET_USER")
 
 # Check if running as root (required for this setup)
