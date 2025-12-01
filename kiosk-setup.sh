@@ -50,7 +50,7 @@ apt-get install -y \
   x11-xserver-utils \
   xinit \
   openbox \
-  chromium-browser \
+  chromium \
   unclutter
 
 echo "Packages installed successfully"
@@ -96,7 +96,7 @@ APP="\$PROJECT/src/main.py"
 "\$VENV_PYTHON" "\$APP" &
 
 # start Chromium
-chromium-browser --kiosk --no-first-run --no-default-browser-check http://127.0.0.1:5000 &
+chromium --kiosk --no-first-run --no-default-browser-check http://127.0.0.1:5000 &
 EOF
 
 chmod 755 "$OPENBOX_AUTOSTART"
