@@ -118,7 +118,7 @@ DNS = 1.1.1.1
 [Peer]
 PublicKey = $WG_SERVER_PUBKEY
 Endpoint = $WG_SERVER_ENDPOINT
-AllowedIPs = 0.0.0.0/0
+AllowedIPs = 10.0.0.0/32
 PersistentKeepalive = 25
 EOF
 
