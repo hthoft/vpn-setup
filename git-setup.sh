@@ -7,18 +7,37 @@
 set -Eeuo pipefail
 trap 'echo "Error on line $LINENO"; exit 1' ERR
 
-# Check if running as root (not recommended for SSH keys)
-if [ "${EUID:-$(id -u)}" -eq 0 ]; then
-  echo "WARNING: Running as root. SSH keys will be created in /root/.ssh/"
-  echo "Consider running as a regular user for better security practices."
-  read -r -p "Continue as root? (y/N): " CONTINUE_ROOT
-  if [[ ! "$CONTINUE_ROOT" =~ ^[Yy]$ ]]; then
-    echo "Exiting. Please run as a regular user."
-    exit 1
-  fi
+# Detect the actual user (even when running with sudo)
+if [ -n "${SUDO_USER:-}" ]; then
+  TARGET_USER="$SUDO_USER"
+elif [ "${EUID:-$(id -u)}" -ne 0 ]; then
+  TARGET_USER="$(whoami)"
+else
+  # Running as root without sudo, prompt for target user
+  read -r -p "Enter the target username for SSH keys: " TARGET_USER
+  while [[ -z "$TARGET_USER" ]]; do
+    read -r -p "Please enter a username: " TARGET_USER
+  done
+fi
+
+TARGET_USER_HOME=$(eval echo "~$TARGET_USER")
+
+# Check if running as root (required for this setup)
+if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+  echo "ERROR: This script must be run as root."
+  echo "Please run with: sudo $0"
+  exit 1
+fi
+
+# Verify target user exists
+if ! id "$TARGET_USER" &>/dev/null; then
+  echo "ERROR: User '$TARGET_USER' does not exist."
+  exit 1
 fi
 
 echo "=== Git Deploy Key Setup Script ==="
+echo "Running as root, SSH keys will be created for user: $TARGET_USER"
+echo "SSH directory: $TARGET_USER_HOME/.ssh/"
 echo
 
 # Get repository information
@@ -60,9 +79,10 @@ echo "Key Name: ${REPO_NAME}_deploy_key"
 echo
 
 # Create SSH directory if it doesn't exist
-SSH_DIR="$HOME/.ssh"
+SSH_DIR="$TARGET_USER_HOME/.ssh"
 mkdir -p "$SSH_DIR"
 chmod 700 "$SSH_DIR"
+chown "$TARGET_USER:$TARGET_USER" "$SSH_DIR"
 
 # Generate SSH key pair
 KEY_NAME="${REPO_NAME}_deploy_key"
@@ -79,6 +99,7 @@ if [[ -f "$PRIVATE_KEY" ]]; then
     ssh-keygen -t ed25519 -f "$PRIVATE_KEY" -N "" -C "${KEY_NAME}@$(hostname)"
     chmod 600 "$PRIVATE_KEY"
     chmod 644 "$PUBLIC_KEY"
+    chown "$TARGET_USER:$TARGET_USER" "$PRIVATE_KEY" "$PUBLIC_KEY"
     echo "New key generated successfully"
   fi
 else
@@ -86,6 +107,7 @@ else
   ssh-keygen -t ed25519 -f "$PRIVATE_KEY" -N "" -C "${KEY_NAME}@$(hostname)"
   chmod 600 "$PRIVATE_KEY"
   chmod 644 "$PUBLIC_KEY"
+  chown "$TARGET_USER:$TARGET_USER" "$PRIVATE_KEY" "$PUBLIC_KEY"
   echo "Key generated successfully"
 fi
 
@@ -150,12 +172,13 @@ echo "Configuring SSH..."
 } >> "$SSH_CONFIG"
 
 chmod 600 "$SSH_CONFIG"
+chown "$TARGET_USER:$TARGET_USER" "$SSH_CONFIG"
 
 echo "SSH configuration added to $SSH_CONFIG"
 
-# Test SSH connection
+# Test SSH connection (as target user)
 echo "Testing SSH connection..."
-if ssh -T "$HOST_ALIAS" 2>&1 | grep -q "successfully authenticated\|Welcome to"; then
+if sudo -u "$TARGET_USER" ssh -T "$HOST_ALIAS" 2>&1 | grep -q "successfully authenticated\|Welcome to"; then
   echo "SUCCESS: SSH connection test passed"
 else
   echo "WARNING: SSH connection test may have failed, but this is often normal for deploy keys"
@@ -167,9 +190,9 @@ DEPLOY_REPO_URL=$(echo "$REPO_URL" | sed "s|git@$GIT_HOST:|git@$HOST_ALIAS:|")
 echo
 echo "Modified repository URL: $DEPLOY_REPO_URL"
 
-# Clone the repository
+# Clone the repository (as target user)
 echo "Cloning repository..."
-if git clone "$DEPLOY_REPO_URL" "$TARGET_DIR"; then
+if sudo -u "$TARGET_USER" git clone "$DEPLOY_REPO_URL" "$TARGET_DIR"; then
   echo "SUCCESS: Repository cloned successfully to $TARGET_DIR"
 else
   echo "ERROR: Failed to clone repository"
@@ -183,16 +206,16 @@ fi
 # Configure git in the cloned repository (optional)
 cd "$TARGET_DIR"
 
-# Check if git user is configured globally
-if ! git config --global user.name >/dev/null 2>&1 || ! git config --global user.email >/dev/null 2>&1; then
+# Check if git user is configured globally for target user
+if ! sudo -u "$TARGET_USER" git config --global user.name >/dev/null 2>&1 || ! sudo -u "$TARGET_USER" git config --global user.email >/dev/null 2>&1; then
   echo
-  echo "Git user not configured globally. Setting up local configuration..."
+  echo "Git user not configured globally for $TARGET_USER. Setting up local configuration..."
   read -r -p "Enter your name for git commits: " GIT_NAME
   read -r -p "Enter your email for git commits: " GIT_EMAIL
   
   if [[ -n "$GIT_NAME" && -n "$GIT_EMAIL" ]]; then
-    git config user.name "$GIT_NAME"
-    git config user.email "$GIT_EMAIL"
+    sudo -u "$TARGET_USER" git config user.name "$GIT_NAME"
+    sudo -u "$TARGET_USER" git config user.email "$GIT_EMAIL"
     echo "Git user configured locally for this repository"
   fi
 fi
@@ -201,10 +224,10 @@ echo
 echo "=== Setup Complete ==="
 echo "Repository: $REPO_URL"
 echo "Cloned to: $TARGET_DIR"
-echo "SSH Key: $PRIVATE_KEY"
+echo "SSH Key: $PRIVATE_KEY (owned by $TARGET_USER)"
 echo "SSH Config: Added $HOST_ALIAS to $SSH_CONFIG"
 echo
-echo "Useful commands:"
+echo "Useful commands (run as $TARGET_USER or with sudo -u $TARGET_USER):"
 echo "  cd $TARGET_DIR                    # Enter repository directory"
 echo "  git status                       # Check repository status"
 echo "  git pull                         # Pull latest changes"
@@ -214,4 +237,5 @@ echo
 echo "To use this deploy key for future operations:"
 echo "  - Use the repository URL: $DEPLOY_REPO_URL"
 echo "  - Or work from within the cloned directory: $TARGET_DIR"
+echo "  - Run git commands as user $TARGET_USER"
 echo
